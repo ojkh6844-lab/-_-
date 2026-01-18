@@ -1,4 +1,4 @@
-name: Build Rami APK
+name: Build Rami APK Professional
 
 on:
   repository_dispatch:
@@ -7,7 +7,7 @@ on:
 jobs:
   build:
     runs-on: ubuntu-latest
-    permissions: # ضروري لمنح الأكشن صلاحية إنشاء إصدار ورفع ملفات
+    permissions:
       contents: write 
     
     steps:
@@ -23,21 +23,56 @@ jobs:
       - name: Install Cordova
         run: npm install -g cordova
 
-      - name: Create and Build App
+      - name: Create and Configure App
         run: |
-          # نستخدم اسم التطبيق المرسل من الواجهة إذا وجد، وإلا نستخدم اسم افتراضي
-          APP_NAME="${{ github.event.client_payload.app_name || 'RamiApp' }}"
-          cordova create myApp com.rami.app "$APP_NAME"
+          # 1. استخراج البيانات المرسلة من الواجهة
+          APP_NAME="${{ github.event.client_payload.app_name }}"
+          # إنشاء معرف فريد لضمان تثبيت التطبيق كنسخة جديدة دائماً
+          UNIQUE_ID="com.rami.app.t$(date +%s)"
+          
+          # 2. إنشاء مشروع Cordova
+          cordova create myApp $UNIQUE_ID "$APP_NAME"
           cd myApp
           cordova platform add android
+          
+          # 3. تنظيف المجلد ووضع ملفاتك (index.html, jpg, ttf)
+          rm -rf www/*
+          cp -v ../index.html www/ 2>/dev/null || true
+          cp -v ../*.jpg www/ 2>/dev/null || true
+          cp -v ../*.ttf www/ 2>/dev/null || true
+          cp -rv ../css ../js ../img www/ 2>/dev/null || true
+
+          # 4. معالجة الأيقونة (تحويل الـ Base64 إلى ملف صورة)
+          if [ ! -z "${{ github.event.client_payload.app_icon }}" ]; then
+            echo "${{ github.event.client_payload.app_icon }}" | base64 -d > www/icon.png
+            # تحديث ملف الإعدادات لاستخدام الأيقونة الجديدة
+            sed -i 's/src="res\/icon\/android\/ldpi.png"/src="www\/icon.png"/g' config.xml
+          fi
+
+          # 5. إضافة الصلاحيات المطلوبة بناءً على اختيارك في الواجهة
+          # إضافة صلاحية الكاميرا
+          if [ "${{ github.event.client_payload.perm_camera }}" == "true" ]; then
+            cordova plugin add cordova-plugin-camera
+          fi
+          
+          # إضافة صلاحية الميكروفون
+          if [ "${{ github.event.client_payload.perm_mic }}" == "true" ]; then
+            cordova plugin add cordova-plugin-media-capture
+          fi
+          
+          # إضافة صلاحية جهات الاتصال
+          if [ "${{ github.event.client_payload.perm_contacts }}" == "true" ]; then
+            cordova plugin add cordova-plugin-contacts
+          fi
+
+          # 6. بناء ملف الـ APK
           cordova build android
           
-          # نقل ملف الـ APK لمجلد خارجي وتغيير اسمه لسهولة الوصول
+          # 7. تحضير الملف النهائي للتحميل
           mkdir -p ../output
-          cp platforms/android/app/build/outputs/apk/debug/app-debug.apk ../output/Rami-App.apk
+          cp platforms/android/app/build/outputs/apk/debug/app-debug.apk ../output/"$APP_NAME".apk
 
-      # الخطوة الأهم: حذف أي إصدار قديم بنفس الاسم لتجنب التعارض
-      - name: Delete Old Release
+      - name: Manage Releases
         uses: dev-drprasad/delete-tag-and-release@v1.1
         with:
           delete_release: true
@@ -45,14 +80,11 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-      # الخطوة السحرية: إنشاء Release جديد ورفع الملف إليه برابط ثابت
-      - name: Create Release and Upload APK
+      - name: Publish APK
         uses: softprops/action-gh-release@v2
         with:
           tag_name: latest
-          name: "إصدار التطبيق الجاهز"
-          draft: false
-          prerelease: false
-          files: output/Rami-App.apk
+          name: "تم بناء تطبيق: ${{ github.event.client_payload.app_name }}"
+          files: output/*.apk
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
