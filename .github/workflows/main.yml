@@ -7,24 +7,31 @@ jobs:
   build:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
       - name: Set up JDK 17
         uses: actions/setup-java@v4
         with:
           java-version: '17'
           distribution: 'temurin'
+
       - name: Install Cordova
         run: npm install -g cordova
-      - name: Build Android APK
+
+      - name: Create and Build App
         run: |
           cordova create myApp com.rami.app "RamiApp"
           cd myApp
           cordova platform add android
-          # هنا يتم بناء الملف
-          cordova build android --release
-      - name: Upload APK Artifact
+          # أمر بناء نسخة debug للتأكد من المسار
+          cordova build android
+          # البحث عن مكان ملف الـ APK وتأكيده
+          find platforms/android/app/build/outputs/apk/ -name "*.apk"
+
+      - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
           name: Rami-App-Final
-          # هذا المسار هو الأهم لجعل الملف يظهر للتحميل
-          path: myApp/platforms/android/app/build/outputs/apk/release/*.apk
+          # استخدام مسار أكثر مرونة لضمان العثور على الملف
+          path: myApp/platforms/android/app/build/outputs/apk/**/*.apk
