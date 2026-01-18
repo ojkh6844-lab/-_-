@@ -15,14 +15,16 @@ jobs:
           distribution: 'temurin'
       - name: Install Cordova
         run: npm install -g cordova
-      - name: Build Process
+      - name: Build Android APK
         run: |
           cordova create myApp com.rami.app "RamiApp"
           cd myApp
           cordova platform add android
+          # هنا يتم بناء الملف
           cordova build android --release
-      - name: Upload APK
+      - name: Upload APK Artifact
         uses: actions/upload-artifact@v4
         with:
           name: Rami-App-Final
+          # هذا المسار هو الأهم لجعل الملف يظهر للتحميل
           path: myApp/platforms/android/app/build/outputs/apk/release/*.apk
