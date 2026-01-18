@@ -26,33 +26,39 @@ jobs:
       - name: Create and Configure App
         run: |
           APP_NAME="${{ github.event.client_payload.app_name }}"
-          UNIQUE_ID="com.rami.pro.t$(date +%s)"
+          UNIQUE_ID="com.rami.pro.app$(date +%s)"
           
+          # إنشاء المشروع
           cordova create myApp $UNIQUE_ID "$APP_NAME"
           cd myApp
           cordova platform add android
           
+          # تنظيف ونسخ الملفات (تأكد أن أسماء الملفات مطابقة لما في هاتفك)
           rm -rf www/*
           cp -v ../index.html www/ 2>/dev/null || true
           cp -v ../card*.jpg www/ 2>/dev/null || true
           cp -v ../font*.ttf www/ 2>/dev/null || true
           cp -rv ../css ../js ../img ../assets www/ 2>/dev/null || true
 
+          # إضافة إضافات الصلاحيات (الموقع، المعرض، الكاميرا)
           cordova plugin add cordova-plugin-geolocation
           cordova plugin add cordova-plugin-camera
-          cordova plugin add cordova-plugin-media-capture
           cordova plugin add cordova-plugin-file
           cordova plugin add cordova-plugin-network-information
 
+          # حل مشكلة ERR_CONNECTION_REFUSED (هام جداً)
+          sed -i 's|<content src="index.html" />|<content src="index.html" />\n    <access origin="*" />\n    <allow-intent href="*" />\n    <allow-navigation href="*" />\n    <preference name="AndroidInsecureFileModeEnabled" value="true" />|g' config.xml
+
+          # معالجة الأيقونة
           if [ ! -z "${{ github.event.client_payload.app_icon }}" ]; then
             echo "${{ github.event.client_payload.app_icon }}" | base64 -d > www/icon.png
             sed -i '/<\/widget>/i \    <icon src="www/icon.png" />' config.xml
           fi
 
-          sed -i 's/<content src="index.html" \/>/<content src="index.html" \/>\n    <access origin="*" \/>\n    <allow-intent href="*" \/>\n    <allow-navigation href="*" \/>/g' config.xml
-
+          # بناء التطبيق
           cordova build android
           
+          # تجهيز الملف للرفع
           mkdir -p ../output
           cp platforms/android/app/build/outputs/apk/debug/app-debug.apk ../output/"$APP_NAME".apk
 
@@ -68,7 +74,7 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           tag_name: latest
-          name: "تم تحديث التطبيق: ${{ github.event.client_payload.app_name }}"
+          name: "تطبيق رامي المحدث: ${{ github.event.client_payload.app_name }}"
           files: output/*.apk
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
