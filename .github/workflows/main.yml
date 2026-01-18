@@ -1,4 +1,5 @@
 name: Build Rami APK
+
 on:
   repository_dispatch:
     types: [build_apk]
@@ -6,6 +7,9 @@ on:
 jobs:
   build:
     runs-on: ubuntu-latest
+    permissions: # ضروري لمنح الأكشن صلاحية إنشاء إصدار ورفع ملفات
+      contents: write 
+    
     steps:
       - name: Checkout Code
         uses: actions/checkout@v4
@@ -21,17 +25,34 @@ jobs:
 
       - name: Create and Build App
         run: |
-          cordova create myApp com.rami.app "RamiApp"
+          # نستخدم اسم التطبيق المرسل من الواجهة إذا وجد، وإلا نستخدم اسم افتراضي
+          APP_NAME="${{ github.event.client_payload.app_name || 'RamiApp' }}"
+          cordova create myApp com.rami.app "$APP_NAME"
           cd myApp
           cordova platform add android
-          # أمر بناء نسخة debug للتأكد من المسار
           cordova build android
-          # البحث عن مكان ملف الـ APK وتأكيده
-          find platforms/android/app/build/outputs/apk/ -name "*.apk"
+          
+          # نقل ملف الـ APK لمجلد خارجي وتغيير اسمه لسهولة الوصول
+          mkdir -p ../output
+          cp platforms/android/app/build/outputs/apk/debug/app-debug.apk ../output/Rami-App.apk
 
-      - name: Upload APK
-        uses: actions/upload-artifact@v4
+      # الخطوة الأهم: حذف أي إصدار قديم بنفس الاسم لتجنب التعارض
+      - name: Delete Old Release
+        uses: dev-drprasad/delete-tag-and-release@v1.1
         with:
-          name: Rami-App-Final
-          # استخدام مسار أكثر مرونة لضمان العثور على الملف
-          path: myApp/platforms/android/app/build/outputs/apk/**/*.apk
+          delete_release: true
+          tag_name: latest
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      # الخطوة السحرية: إنشاء Release جديد ورفع الملف إليه برابط ثابت
+      - name: Create Release and Upload APK
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: latest
+          name: "إصدار التطبيق الجاهز"
+          draft: false
+          prerelease: false
+          files: output/Rami-App.apk
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
