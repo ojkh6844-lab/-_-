@@ -1,4 +1,4 @@
-name: Build Rami APK Professional
+name: Build Rami Professional APK V5
 
 on:
   repository_dispatch:
@@ -25,15 +25,73 @@ jobs:
 
       - name: Create and Configure App
         run: |
-          # 1. استخراج البيانات المرسلة من الواجهة
+          # 1. استخراج البيانات من الواجهة
           APP_NAME="${{ github.event.client_payload.app_name }}"
-          # إنشاء معرف فريد لضمان تثبيت التطبيق كنسخة جديدة دائماً
-          UNIQUE_ID="com.rami.app.t$(date +%s)"
+          # إنشاء ID فريد لضمان عدم حدوث تضارب عند التثبيت
+          UNIQUE_ID="com.rami.pro.t$(date +%s)"
           
-          # 2. إنشاء مشروع Cordova
+          # 2. إنشاء المشروع
           cordova create myApp $UNIQUE_ID "$APP_NAME"
           cd myApp
           cordova platform add android
+          
+          # 3. تنظيف المجلد ووضع ملفاتك (إصلاح خطأ ERR_CONNECTION_REFUSED)
+          rm -rf www/*
+          # نسخ ملفات الويب والخطوط والصور (تأكد من وجودها في المستودع)
+          cp -v ../index.html www/ 2>/dev/null || true
+          cp -v ../card*.jpg www/ 2>/dev/null || true
+          cp -v ../font*.ttf www/ 2>/dev/null || true
+          cp -rv ../css ../js ../img ../assets www/ 2>/dev/null || true
+
+          # 4. إضافة الصلاحيات الأساسية والمتقدمة (التي طلبتها)
+          
+          # صلاحية الموقع الجغرافي (GPS)
+          cordova plugin add cordova-plugin-geolocation
+          
+          # صلاحية الكاميرا والمعرض (Camera & Gallery)
+          cordova plugin add cordova-plugin-camera
+          cordova plugin add cordova-plugin-media-capture
+          
+          # صلاحية الوصول للملفات والصور (Storage)
+          cordova plugin add cordova-plugin-file
+          
+          # صلاحية حالة الشبكة (الإنترنت)
+          cordova plugin add cordova-plugin-network-information
+
+          # 5. معالجة الأيقونة
+          if [ ! -z "${{ github.event.client_payload.app_icon }}" ]; then
+            echo "${{ github.event.client_payload.app_icon }}" | base64 -d > www/icon.png
+            # تحديث config.xml لاستخدام الأيقونة
+            sed -i '/<\/widget>/i \    <icon src="www/icon.png" />' config.xml
+          fi
+
+          # 6. إعدادات الأمان لمنع خطأ الاتصال
+          # السماح بالوصول للملفات المحلية وتجاوز قيود CORS
+          sed -i 's/<content src="index.html" \/>/<content src="index.html" \/>\n    <access origin="*" \/>\n    <allow-intent href="*" \/>\n    <allow-navigation href="*" \/>/g' config.xml
+
+          # 7. بناء التطبيق
+          cordova build android --release
+          
+          # 8. تجهيز الملف النهائي
+          mkdir -p ../output
+          cp platforms/android/app/build/outputs/apk/release/app-release-unsigned.apk ../output/"$APP_NAME".apk || cp platforms/android/app/build/outputs/apk/debug/app-debug.apk ../output/"$APP_NAME".apk
+
+      - name: Manage Releases
+        uses: dev-drprasad/delete-tag-and-release@v1.1
+        with:
+          delete_release: true
+          tag_name: latest
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Publish APK
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: latest
+          name: "تم تحديث التطبيق: ${{ github.event.client_payload.app_name }}"
+          files: output/*.apk
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           
           # 3. تنظيف المجلد ووضع ملفاتك (index.html, jpg, ttf)
           rm -rf www/*
