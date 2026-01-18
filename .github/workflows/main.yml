@@ -1,0 +1,26 @@
+name: Build Rami APK
+on:
+  repository_dispatch:
+    types: [build_apk] # سيعمل السيرفر عندما ترسل له واجهتك هذا الأمر
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v2
+      - name: set up JDK 11
+        uses: actions/setup-java@v2
+        with:
+          java-version: '11'
+          distribution: 'adopt'
+          
+      - name: Install Cordova
+        run: npm install -g cordova
+
+      - name: Build Android APK
+        run: |
+          cordova create myApp com.rami.app "MyRamiApp"
+          cd myApp
+          cordova platform add android
+          # هنا سيتم وضع ملفاتك التي رفعتها من الواجهة
+          cordova build android
